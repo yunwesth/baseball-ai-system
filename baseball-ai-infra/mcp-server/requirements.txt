@@ -1,0 +1,7 @@
+# MCP Python SDK
+# This lets us create an MCP server in Python
+mcp
+
+# HTTP client library
+# This lets the MCP server call our REST API
+httpx

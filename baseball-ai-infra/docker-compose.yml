@@ -1,0 +1,104 @@
+# Docker Compose configuration for the Baseball AI Infrastructure
+name: baseball-ai-infra
+
+services:
+
+  # =====================================
+
+  # Baseball REST API
+
+  # =====================================
+
+  baseball-api:
+
+    # Build the Docker image from the api folder
+
+    build:
+
+      context: ./api
+
+      dockerfile: Dockerfile
+
+    # Name of the running container
+
+    container_name: baseball-api
+
+    # Map DGX port 8010 -> container port 8000
+
+    ports:
+
+      - "8010:8000"
+
+    # Restart automatically unless manually stopped
+
+    restart: unless-stopped
+
+    # Start the FastAPI server
+
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+    # Connect this service to the baseball network
+
+    networks:
+
+      - baseball-network
+
+  # =====================================
+
+  # Baseball MCP Server
+
+  # =====================================
+
+  baseball-mcp:
+
+    # Build the Docker image from the mcp-server folder
+
+    build:
+
+      context: ./mcp-server
+
+      dockerfile: Dockerfile
+
+    # Name of the running container
+
+    container_name: baseball-mcp
+
+    # Make sure the API starts first
+
+    depends_on:
+
+      - baseball-api
+
+    # API URL inside the Docker network
+
+    environment:
+
+      BASEBALL_API_URL: http://baseball-api:8000
+
+    # Don't start with a normal `docker compose up`
+
+    profiles:
+
+      - mcp
+
+    # Start the MCP server
+
+    command: python mcp_server.py
+
+    # Connect to the same Docker network
+
+    networks:
+
+      - baseball-network
+
+# =====================================
+
+# Shared Docker Network
+
+# =====================================
+
+networks:
+
+  baseball-network:
+
+    driver: bridge
