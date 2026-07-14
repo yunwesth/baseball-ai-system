@@ -1,36 +1,57 @@
 """
-mcp_client.py
+MCP client for the Baseball AI orchestrator.
 
-MCP 서버와의 연결, 초기화, 도구 조회 및 도구 호출을 담당한다.
+This module starts the local MCP server as a subprocess and communicates
+with it through the MCP stdio transport.
 """
 
+import os
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import CallToolResult, ListToolsResult
 
-from config import MCP_SERVER_PATH, PYTHON_COMMAND
+from config import (
+    BASEBALL_API_URL,
+    MCP_SERVER_PATH,
+)
 
 
 class MCPClient:
     """
-    stdio transport를 사용하여 MCP 서버와 통신하는 클라이언트.
+    Client used by the orchestrator to communicate with the MCP server.
     """
 
     def __init__(self) -> None:
         """
-        MCP 서버 실행 정보를 준비한다.
+        Prepare the MCP server subprocess configuration.
 
-        이 시점에는 아직 서버가 실행되거나 연결되지 않는다.
+        The MCP server is not started until session() is entered.
         """
-        import os
+        server_path = Path(MCP_SERVER_PATH).resolve()
+
+        if not server_path.is_file():
+            raise FileNotFoundError(
+                f"MCP server file was not found: {server_path}"
+            )
+
+        # Start with a copy of the current process environment.
+        child_environment = os.environ.copy()
+
+        # Explicitly pass the Baseball API URL to the MCP server subprocess.
+        # This value comes from config.py, which loads orchestrator/.env.
+        child_environment["BASEBALL_API_URL"] = BASEBALL_API_URL
 
         self._server_parameters = StdioServerParameters(
-            command=PYTHON_COMMAND,
-            args=[MCP_SERVER_PATH],
-            env=os.environ.copy(),
+            # Use the exact same Python interpreter and virtual environment
+            # that are running the orchestrator.
+            command=sys.executable,
+            args=[str(server_path)],
+            env=child_environment,
         )
 
         self._session: ClientSession | None = None
@@ -38,16 +59,16 @@ class MCPClient:
     @property
     def connected(self) -> bool:
         """
-        현재 활성 MCP 세션이 존재하는지 반환한다.
+        Return True when an initialized MCP session is active.
         """
         return self._session is not None
 
     def _require_session(self) -> ClientSession:
         """
-        활성 세션을 반환한다.
+        Return the active MCP session.
 
-        연결되지 않은 상태에서 도구를 조회하거나 호출하면
-        명확한 RuntimeError를 발생시킨다.
+        Raise a clear error if an MCP operation is attempted before
+        entering session().
         """
         if self._session is None:
             raise RuntimeError(
@@ -60,24 +81,25 @@ class MCPClient:
     @asynccontextmanager
     async def session(self) -> AsyncIterator[None]:
         """
-        MCP 서버를 실행하고 초기화된 세션을 제공한다.
+        Start the MCP server, open a session, and initialize it.
 
-        사용 예시:
-
-            async with client.session():
-                tools = await client.list_tools()
+        The subprocess and streams are automatically closed when the
+        context manager exits.
         """
         if self.connected:
-            raise RuntimeError("MCP Client already has an active session.")
+            raise RuntimeError(
+                "MCP Client already has an active session."
+            )
 
-        async with stdio_client(self._server_parameters) as (
-            read_stream,
-            write_stream,
-        ):
+        async with stdio_client(
+            self._server_parameters
+        ) as (read_stream, write_stream):
+
             async with ClientSession(
                 read_stream,
                 write_stream,
             ) as session:
+
                 self._session = session
 
                 try:
@@ -88,9 +110,10 @@ class MCPClient:
 
     async def list_tools(self) -> ListToolsResult:
         """
-        MCP 서버가 제공하는 모든 도구의 목록을 요청한다.
+        Return the tools exposed by the MCP server.
         """
         session = self._require_session()
+
         return await session.list_tools()
 
     async def call_tool(
@@ -99,25 +122,21 @@ class MCPClient:
         arguments: dict[str, Any] | None = None,
     ) -> CallToolResult:
         """
-        MCP 서버의 도구 하나를 호출한다.
-
-        Args:
-            tool_name:
-                호출할 MCP 도구 이름.
-
-            arguments:
-                도구에 전달할 입력값.
-                입력이 없으면 빈 딕셔너리를 사용한다.
-
-        Returns:
-            MCP 서버가 반환한 CallToolResult.
+        Call one MCP tool with the supplied arguments.
         """
-        if not tool_name.strip():
-            raise ValueError("tool_name cannot be empty.")
+        if not isinstance(tool_name, str) or not tool_name.strip():
+            raise ValueError(
+                "tool_name must be a non-empty string."
+            )
+
+        if arguments is not None and not isinstance(arguments, dict):
+            raise ValueError(
+                "arguments must be a dictionary or None."
+            )
 
         session = self._require_session()
 
         return await session.call_tool(
-            tool_name,
+            tool_name.strip(),
             arguments=arguments or {},
         )

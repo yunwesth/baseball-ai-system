@@ -5,8 +5,15 @@ Configuration values for the Baseball AI orchestrator.
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 ORCHESTRATOR_DIRECTORY = Path(__file__).resolve().parent
+
+# Load variables from orchestrator/.env.
+load_dotenv(
+    dotenv_path=ORCHESTRATOR_DIRECTORY / ".env"
+)
 
 MCP_SERVER_PATH = str(
     (
@@ -21,7 +28,7 @@ PYTHON_COMMAND = os.getenv(
 )
 
 TIMEOUT_SECONDS = float(
-    os.getenv("TIMEOUT_SECONDS", "30")
+    os.getenv("TIMEOUT_SECONDS", "180")
 )
 
 LLM_BASE_URL = os.getenv(
@@ -42,3 +49,8 @@ LLM_API_KEY = os.getenv(
 LLM_TEMPERATURE = float(
     os.getenv("LLM_TEMPERATURE", "0")
 )
+
+BASEBALL_API_URL = os.getenv(
+    "BASEBALL_API_URL",
+    "http://127.0.0.1:8010",
+).rstrip("/")
