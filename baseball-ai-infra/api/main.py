@@ -54,14 +54,18 @@ def analyze_player(player: PlayerStats):
     elif ops >= 0.700:
         level = "average"  # OPS 0.700 to 0.799 is average
     else:
-        level = "needs improvement"  # OPS below 0.700 needs improvement
+        level = "needs improvement on"  # OPS below 0.700 needs improvement
 
     # Return the analysis as JSON
+    article = "an" if level in {"excellent", "average"} else "a"
+
     return {
-        "player": player.name,  # Return the player's name
-        "avg": player.avg,  # Return batting average
-        "obp": player.obp,  # Return on-base percentage
-        "slg": player.slg,  # Return slugging percentage
-        "ops": round(ops, 3),  # Return OPS rounded to 3 decimals
-        "analysis": f"{player.name} has a {level} offensive profile."  # Human-readable analysis
+        "player": player.name,
+        "avg": player.avg,
+        "obp": player.obp,
+        "slg": player.slg,
+        "ops": round(ops, 3),
+        "analysis": (
+            f"{player.name} has {article} {level} offensive profile."
+        ),
     }
